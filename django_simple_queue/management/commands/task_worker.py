@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from taskmanager.models import Task
+from django_simple_queue.models import Task
 from django.utils import timezone
 import importlib
 import time

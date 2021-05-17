@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse, HttpResponseBadRequest
-from taskmanager.models import Task
+from django_simple_queue.models import Task
 
 
 def view_task_status(request):

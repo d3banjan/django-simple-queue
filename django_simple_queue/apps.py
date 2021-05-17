@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class TaskmanagerConfig(AppConfig):
-    name = 'taskmanager'
+class DjangoSimpleQueueConfig(AppConfig):
+    name = 'django_simple_queue'

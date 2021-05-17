@@ -1,4 +1,4 @@
-from taskmanager.models import Task
+from django_simple_queue.models import Task
 import json
 
 

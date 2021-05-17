@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.shortcuts import reverse
 from django.utils.safestring import mark_safe
-from taskmanager.models import Task
+from django_simple_queue.models import Task
 
 
 @admin.register(Task)
@@ -14,7 +14,7 @@ class TaskAdmin(admin.ModelAdmin):
 
     def status_page_link(self, obj):
         return mark_safe("<a href='{}?task_id={}', target='_blank'>{}</a>".format(
-            reverse('taskmanager:task'),
+            reverse('django_simple_queue:task'),
             obj.id,
             obj.get_status_display(),
         ))
