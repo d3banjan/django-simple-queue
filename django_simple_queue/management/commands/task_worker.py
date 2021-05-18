@@ -17,16 +17,14 @@ def process_task(task_id):
     args = json.loads(task_obj.args)
     if task_obj.status == Task.QUEUED:  # One more extra check to make sure
         print(f"Initiating task id: {task_id}")
+        task_obj.output = ""
         try:
             task_obj.status = Task.PROGRESS
             task_obj.save()
             if inspect.isgeneratorfunction(func):
                 for i in func(**args):
                     output = i
-                    if task_obj.output:
-                        task_obj.output += output
-                    else:
-                        task_obj.output = output
+                    task_obj.output += output
                     task_obj.save()
             else:
                 task_obj.output = func(**args)

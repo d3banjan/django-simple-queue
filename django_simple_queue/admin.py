@@ -31,8 +31,8 @@ class TaskAdmin(admin.ModelAdmin):
             updated,
         ) % updated, messages.SUCCESS)
 
-    ordering = ['-created', ]
+    ordering = ['-modified', ]
     list_display = ('id', 'created', 'modified', 'task', 'status_page_link')
-    list_filter = ('status', 'created', )
+    list_filter = ('status', 'created', 'modified')
     search_fields = ('id', 'task', 'output')
     actions = ['enqueue_tasks']
