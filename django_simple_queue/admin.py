@@ -4,6 +4,11 @@ from django.utils.safestring import mark_safe
 from django_simple_queue.models import Task
 
 
+@admin.action(description='Enqueue')
+def enqueue_tasks(modeladmin, request, queryset):
+    queryset.update(status=Task.QUEUED)
+
+
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
 
@@ -24,3 +29,4 @@ class TaskAdmin(admin.ModelAdmin):
     list_display = ('id', 'created', 'modified', 'task', 'status_page_link')
     list_filter = ('status', 'created', )
     search_fields = ('id', 'task', 'output')
+    actions = [enqueue_tasks]

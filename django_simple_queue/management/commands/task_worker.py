@@ -6,6 +6,7 @@ import time
 import json
 import inspect
 import random
+import traceback
 
 
 def process_task(task_id):
@@ -33,7 +34,7 @@ def process_task(task_id):
             task_obj.status = Task.COMPLETED
             task_obj.save()
         except Exception as e:
-            task_obj.output += repr(e)
+            task_obj.output += f"{repr(e)}\n\n{traceback.format_exc()}"
             task_obj.status = Task.FAILED
             task_obj.save()
         finally:
@@ -49,7 +50,7 @@ class Command(BaseCommand):
             while True:
                 time.sleep(sleep_interval)
                 print(f"{timezone.now()}: Heartbeat..")
-                queued_task = Task.objects.filter(status=Task.QUEUED).order_by('created').first()
+                queued_task = Task.objects.filter(status=Task.QUEUED).order_by('modified').first()
                 if queued_task:
                     process_task(task_id=queued_task.id)
         except KeyboardInterrupt:
