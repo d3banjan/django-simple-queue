@@ -25,7 +25,7 @@ from setuptools import setup, find_packages
 links = []  # for repo urls (dependency_links)
 
 DESCRIPTION = "Django based app for Task queue manager using database as the broker."
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 
 setup(
     name="django-simple-queue",

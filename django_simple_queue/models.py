@@ -1,6 +1,6 @@
 from django.db import models
 from django.core.exceptions import ValidationError
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 import uuid
 import importlib
 import json
@@ -8,13 +8,13 @@ import json
 
 class Task(models.Model):
     """Model for the task."""
-    
+
     QUEUED = 0
     PROGRESS = 1
     COMPLETED = 2
     FAILED = 3
     CANCELLED = 4
-    
+
     STATUS_CHOICES = (
         (QUEUED, _("Queued")),
         (PROGRESS, _("In progress")),
@@ -22,7 +22,7 @@ class Task(models.Model):
         (FAILED, _("Failed")),
         (CANCELLED, _("Cancelled"))
     )
-    
+
     id = models.UUIDField(_("ID"), primary_key=True, default=uuid.uuid4, editable=False)
     created = models.DateTimeField(_("Created"), auto_now_add=True)
     modified = models.DateTimeField(_("Modified"), auto_now=True)
@@ -30,14 +30,14 @@ class Task(models.Model):
     args = models.TextField(_("Arguments"), null=True, blank=True, help_text="Arguments in JSON format")
     status = models.IntegerField(_("Status"), default=QUEUED, choices=STATUS_CHOICES)
     output = models.TextField(_("Output"), null=True, blank=True)
-    
+
     def __str__(self):
         return str(self.id)
 
     class Meta:
         verbose_name = _("Task")
         verbose_name_plural = _("Tasks")
-        
+
     @property
     def as_dict(self):
         return {
@@ -69,7 +69,7 @@ class Task(models.Model):
                 'callable': ValidationError(
                     _('Invalid callable, must be importable'), code='invalid')
             })
-        
+
     def clean_args(self):
         """Custom validation of the args field."""
         try:
