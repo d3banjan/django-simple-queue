@@ -30,3 +30,4 @@ create_task(
     args={"arg1": 1, "arg2": 2} # Should be a dict object
 )
 ````
+The task queue can be viewed at /django_simple_queue/task
