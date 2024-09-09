@@ -11,14 +11,14 @@ import traceback
 
 def process_task(task_id):
     task_obj = Task.objects.get(id=task_id)
-    path = task_obj.task.split('.')
-    module = importlib.import_module('.'.join(path[:-1]))
-    func = getattr(module, path[-1])
-    args = json.loads(task_obj.args)
+    print(f"Initiating task id: {task_id}")
     if task_obj.status == Task.QUEUED:  # One more extra check to make sure
-        print(f"Initiating task id: {task_id}")
-        task_obj.output = ""
         try:
+            path = task_obj.task.split('.')
+            module = importlib.import_module('.'.join(path[:-1]))
+            func = getattr(module, path[-1])
+            args = json.loads(task_obj.args)
+            task_obj.output = ""
             task_obj.status = Task.PROGRESS
             task_obj.save()
             if inspect.isgeneratorfunction(func):

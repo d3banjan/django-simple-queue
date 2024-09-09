@@ -25,7 +25,7 @@ from setuptools import setup, find_packages
 links = []  # for repo urls (dependency_links)
 
 DESCRIPTION = "Django based app for Task queue manager using database as the broker."
-VERSION = "0.1.7"
+VERSION = "0.1.8"
 
 setup(
     name="django-simple-queue",
@@ -40,11 +40,11 @@ setup(
     packages=['django_simple_queue', 'django_simple_queue.migrations', 'django_simple_queue.management', 'django_simple_queue.management.commands'],
     platforms=["any"],
     keywords=["django", "queue", "task", "manager"],
-    classifiers=(
+    classifiers=[
         "Programming Language :: Python :: 3.6",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
-    ),
+    ],
     install_requires=open('requirements.txt').read(),
     dependency_links=links,
 )
