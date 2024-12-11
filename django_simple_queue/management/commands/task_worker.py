@@ -1,4 +1,6 @@
-from django.core.management.base import BaseCommand, CommandError
+import asyncio
+
+from django.core.management.base import BaseCommand
 from django_simple_queue.models import Task
 from django.utils import timezone
 import importlib
@@ -21,6 +23,13 @@ def process_task(task_id):
             task_obj.output = ""
             task_obj.status = Task.PROGRESS
             task_obj.save()
+
+            # In case event loop gets killed
+            try:
+                asyncio.set_event_loop(asyncio.get_running_loop())
+            except RuntimeError:
+                asyncio.set_event_loop(asyncio.new_event_loop())
+
             if inspect.isgeneratorfunction(func):
                 for i in func(**args):
                     output = i
