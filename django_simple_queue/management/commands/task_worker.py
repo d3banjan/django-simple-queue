@@ -1,45 +1,58 @@
-import asyncio
+import os
+import random
+import time
+from multiprocessing import Process
 
 import psutil
 from django.core.management.base import BaseCommand
-from django_simple_queue.models import Task
 from django.utils import timezone
-import importlib
-import time
-import json
-import inspect
-import random
-import traceback
 
-
-
-class ManagedEventLoop:
-    def __init__(self):
-        self.loop = None
-
-    def __enter__(self):
-        try:
-            self.loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-        return self.loop
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        if self.loop is not None:
-            self.loop.close()
-
+from django_simple_queue.models import Task
 
 
 def process_task(task_id):
+    import asyncio
+    import importlib
+    import inspect
+    import json
+    import traceback
+
+    # Get settings from parent process environment
+    settings_module = os.environ.get("DJANGO_SETTINGS_MODULE")
+    if settings_module is not None:
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", settings_module)
+
+    # Initialize Django
+    import django
+    django.setup()
+
+    # reimport Task model inside child process
+    from django_simple_queue.models import Task
+
+    class ManagedEventLoop:
+        def __init__(self):
+            self.loop = None
+
+        def __enter__(self):
+            try:
+                self.loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+            return self.loop
+
+        def __exit__(self, exc_type, exc_value, exc_tb):
+            if self.loop is not None:
+                self.loop.close()
+
     task_obj = Task.objects.get(id=task_id)
     print(f"Initiating task id: {task_id}")
     if task_obj.status == Task.QUEUED:  # One more extra check to make sure
         # In case event loop gets killed
         with ManagedEventLoop() as loop:
             try:
-                path = task_obj.task.split('.')
-                module = importlib.import_module('.'.join(path[:-1]))
+                path = task_obj.task.split(".")
+                module = importlib.import_module(".".join(path[:-1]))
                 func = getattr(module, path[-1])
                 args = json.loads(task_obj.args)
                 task_obj.output = ""
@@ -74,7 +87,7 @@ def log_memory_usage():
     return round(mem_info.rss / (1024 * 1024), 2)
 
 class Command(BaseCommand):
-    help = 'Executes the enqueued tasks.'
+    help = "Executes the enqueued tasks."
 
     def handle(self, *args, **options):
         try:
@@ -82,8 +95,12 @@ class Command(BaseCommand):
             while True:
                 time.sleep(sleep_interval)
                 print(f"{timezone.now()}: [RAM Usage: {log_memory_usage()} MB] Heartbeat..")
-                queued_task = Task.objects.filter(status=Task.QUEUED).order_by('modified').first()
+                queued_task = Task.objects.filter(status=Task.QUEUED).order_by("modified").first()
                 if queued_task:
-                    process_task(task_id=queued_task.id)
+                    # process_task(task_id=queued_task.id)
+                    # Create a new process for the task
+                    p = Process(target=process_task, args=(queued_task.id,))
+                    p.start()
+                    p.join()  # Wait for the process to complete
         except KeyboardInterrupt:
             pass
