@@ -1,5 +1,6 @@
 import asyncio
 
+import psutil
 from django.core.management.base import BaseCommand
 from django_simple_queue.models import Task
 from django.utils import timezone
@@ -63,6 +64,15 @@ def process_task(task_id):
                 print(f"Finished task id: {task_id}")
 
 
+
+
+
+def log_memory_usage():
+    """Returns the memory usage of the current process in MB."""
+    process = psutil.Process()
+    mem_info = process.memory_info()
+    return round(mem_info.rss / (1024 * 1024), 2)
+
 class Command(BaseCommand):
     help = 'Executes the enqueued tasks.'
 
@@ -71,7 +81,7 @@ class Command(BaseCommand):
             sleep_interval = random.randint(3, 9)
             while True:
                 time.sleep(sleep_interval)
-                print(f"{timezone.now()}: Heartbeat..")
+                print(f"{timezone.now()}: [RAM Usage: {log_memory_usage()} MB] Heartbeat..")
                 queued_task = Task.objects.filter(status=Task.QUEUED).order_by('modified').first()
                 if queued_task:
                     process_task(task_id=queued_task.id)
