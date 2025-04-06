@@ -1,16 +1,18 @@
 import asyncio
+import importlib
+import inspect
+import json
+import random
+import time
+import traceback
+from multiprocessing import Process
 
 import psutil
 from django.core.management.base import BaseCommand
-from django_simple_queue.models import Task
+from django.db import connections
 from django.utils import timezone
-import importlib
-import time
-import json
-import inspect
-import random
-import traceback
 
+from django_simple_queue.models import Task
 
 
 class ManagedEventLoop:
@@ -84,6 +86,14 @@ class Command(BaseCommand):
                 print(f"{timezone.now()}: [RAM Usage: {log_memory_usage()} MB] Heartbeat..")
                 queued_task = Task.objects.filter(status=Task.QUEUED).order_by('modified').first()
                 if queued_task:
-                    process_task(task_id=queued_task.id)
+                    # since parent connections are copied to the child process
+                    # avoid corruption by closing all connections
+                    connections.close_all()
+
+                    # Create a new process for the task
+                    p = Process(target=process_task, args=(queued_task.id,))
+                    p.start()
+                    p.join()  # Wait for the process to complete
+
         except KeyboardInterrupt:
             pass
