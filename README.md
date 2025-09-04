@@ -87,5 +87,15 @@ create_task(
 ````
 The task queue can be viewed at /django_simple_queue/task
 
+## Concurrency and locking
+
+To prevent multiple workers from picking the same task, the worker command (`django_simple_queue/management/commands/task_worker.py`) uses database-level pessimistic locking when claiming tasks:
+
+- It wraps the selection in a transaction and queries with `select_for_update(skip_locked=True)` to lock a single queued task row and skip any rows currently locked by another worker.
+- Once a task is selected under the lock, the worker immediately marks it as `In progress` (`Task.PROGRESS`) within the same transaction. Only after claiming does it spawn a subprocess to execute the task.
+- If the database backend does not support `skip_locked`, the code falls back to `select_for_update()` without the `skip_locked` argument. While this still provides row-level locking on supported backends, `skip_locked` offers better concurrency characteristics.
+
+Recommended backends: For robust concurrent processing with multiple workers, use a database that supports `SELECT ... FOR UPDATE SKIP LOCKED` (e.g., PostgreSQL). SQLite may not provide full locking semantics for this pattern; it is best suited for development or single-worker setups.
+
 [^1]: The metric used is Resident Set Size from the `psutil` python module, which double counts shared libraries and is 
 slightly more than actual RAM Usage.

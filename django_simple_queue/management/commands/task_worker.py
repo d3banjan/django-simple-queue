@@ -10,6 +10,8 @@ from multiprocessing import Process
 import psutil
 from django.core.management.base import BaseCommand
 from django.db import connections
+from django.db import transaction
+from django.db.utils import NotSupportedError
 from django.utils import timezone
 
 from django_simple_queue.models import Task
@@ -36,7 +38,7 @@ class ManagedEventLoop:
 def process_task(task_id):
     task_obj = Task.objects.get(id=task_id)
     print(f"Initiating task id: {task_id}")
-    if task_obj.status == Task.QUEUED:  # One more extra check to make sure
+    if task_obj.status in (Task.QUEUED, Task.PROGRESS):  # Proceed if already claimed by parent
         # In case event loop gets killed
         with ManagedEventLoop() as loop:
             try:
@@ -45,7 +47,6 @@ def process_task(task_id):
                 func = getattr(module, path[-1])
                 args = json.loads(task_obj.args)
                 task_obj.output = ""
-                task_obj.status = Task.PROGRESS
                 task_obj.save()
 
                 if inspect.isgeneratorfunction(func):
@@ -84,14 +85,32 @@ class Command(BaseCommand):
             while True:
                 time.sleep(sleep_interval)
                 print(f"{timezone.now()}: [RAM Usage: {log_memory_usage()} MB] Heartbeat..")
-                queued_task = Task.objects.filter(status=Task.QUEUED).order_by('modified').first()
-                if queued_task:
+                task_id = None
+                # Use pessimistic locking to claim a single queued task
+                with transaction.atomic():
+                    try:
+                        qs = Task.objects.select_for_update(skip_locked=True)
+                    except NotSupportedError:
+                        # Fallback for DBs without skip_locked support
+                        qs = Task.objects.select_for_update()
+
+                    queued_task = (
+                        qs.filter(status=Task.QUEUED)
+                        .order_by('modified')
+                        .first()
+                    )
+                    if queued_task:
+                        queued_task.status = Task.PROGRESS  # claim the task
+                        queued_task.save(update_fields=["status", "modified"])
+                        task_id = queued_task.id
+
+                if task_id:
                     # since parent connections are copied to the child process
                     # avoid corruption by closing all connections
                     connections.close_all()
 
                     # Create a new process for the task
-                    p = Process(target=process_task, args=(queued_task.id,))
+                    p = Process(target=process_task, args=(task_id,))
                     p.start()
                     p.join()  # Wait for the process to complete
 
