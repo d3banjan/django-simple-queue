@@ -2,6 +2,7 @@ import os
 
 from django.test import TransactionTestCase
 
+from django_simple_queue import signals
 from django_simple_queue.models import Task
 from django_simple_queue.monitor import detect_orphaned_tasks, handle_subprocess_exit
 from django_simple_queue.worker import execute_task
@@ -113,3 +114,81 @@ class OrphanDetectionTest(TransactionTestCase):
         handle_subprocess_exit(task.id, exit_code=0)
         task.refresh_from_db()
         self.assertEqual(task.status, Task.COMPLETED)
+
+
+class SignalTest(TransactionTestCase):
+    def test_regular_task_signals(self):
+        received = []
+
+        def on_before(sender, task, **kw):
+            received.append("before_job")
+
+        def on_success(sender, task, **kw):
+            received.append("on_success")
+
+        signals.before_job.connect(on_before)
+        signals.on_success.connect(on_success)
+        try:
+            task = Task.objects.create(
+                task="django_simple_queue.test_tasks.return_hello", args="{}"
+            )
+            execute_task(task.id)
+            self.assertEqual(received, ["before_job", "on_success"])
+        finally:
+            signals.before_job.disconnect(on_before)
+            signals.on_success.disconnect(on_success)
+
+    def test_failing_task_signals(self):
+        received = []
+        errors = []
+
+        def on_before(sender, task, **kw):
+            received.append("before_job")
+
+        def on_fail(sender, task, error=None, **kw):
+            received.append("on_failure")
+            errors.append(error)
+
+        signals.before_job.connect(on_before)
+        signals.on_failure.connect(on_fail)
+        try:
+            task = Task.objects.create(
+                task="django_simple_queue.test_tasks.raise_error", args="{}"
+            )
+            execute_task(task.id)
+            self.assertEqual(received, ["before_job", "on_failure"])
+            self.assertIsInstance(errors[0], ValueError)
+        finally:
+            signals.before_job.disconnect(on_before)
+            signals.on_failure.disconnect(on_fail)
+
+    def test_generator_loop_signals(self):
+        iterations = []
+
+        def on_before_loop(sender, task, iteration, **kw):
+            iterations.append(("before", iteration))
+
+        def on_after_loop(sender, task, output, iteration, **kw):
+            iterations.append(("after", iteration, output))
+
+        signals.before_loop.connect(on_before_loop)
+        signals.after_loop.connect(on_after_loop)
+        try:
+            task = Task.objects.create(
+                task="django_simple_queue.test_tasks.gen_abc", args="{}"
+            )
+            execute_task(task.id)
+            self.assertEqual(
+                iterations,
+                [
+                    ("before", 0),
+                    ("after", 0, "a"),
+                    ("before", 1),
+                    ("after", 1, "b"),
+                    ("before", 2),
+                    ("after", 2, "c"),
+                ],
+            )
+        finally:
+            signals.before_loop.disconnect(on_before_loop)
+            signals.after_loop.disconnect(on_after_loop)

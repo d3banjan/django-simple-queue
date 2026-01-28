@@ -4,6 +4,7 @@ import inspect
 import json
 import traceback
 
+from django_simple_queue import signals
 from django_simple_queue.models import Task
 
 
@@ -29,6 +30,7 @@ def execute_task(task_id, log_fd=None):
     print(f"Initiating task id: {task_id}")
     if task_obj.status in (Task.QUEUED, Task.PROGRESS):
         with ManagedEventLoop():
+            signals.before_job.send(sender=Task, task=task_obj)
             try:
                 path = task_obj.task.split(".")
                 module = importlib.import_module(".".join(path[:-1]))
@@ -38,18 +40,32 @@ def execute_task(task_id, log_fd=None):
                 task_obj.save()
 
                 if inspect.isgeneratorfunction(func):
-                    for i in func(**args):
-                        output = i
+                    gen = func(**args)
+                    iteration = 0
+                    for output in gen:
+                        signals.before_loop.send(
+                            sender=Task, task=task_obj, iteration=iteration
+                        )
                         task_obj.output += output
                         task_obj.save()
+                        signals.after_loop.send(
+                            sender=Task,
+                            task=task_obj,
+                            output=output,
+                            iteration=iteration,
+                        )
+                        iteration += 1
                 else:
                     task_obj.output = func(**args)
                     task_obj.save()
+
                 task_obj.status = Task.COMPLETED
                 task_obj.save()
+                signals.on_success.send(sender=Task, task=task_obj)
             except Exception as e:
                 task_obj.error = f"{repr(e)}\n\n{traceback.format_exc()}"
                 task_obj.status = Task.FAILED
                 task_obj.save()
+                signals.on_failure.send(sender=Task, task=task_obj, error=e)
             finally:
                 print(f"Finished task id: {task_id}")
