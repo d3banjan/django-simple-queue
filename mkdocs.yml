@@ -1,0 +1,87 @@
+site_name: Django Simple Queue
+site_url: https://d3banjan.github.io/django-simple-queue/
+repo_url: https://github.com/d3banjan/django-simple-queue
+repo_name: d3banjan/django-simple-queue
+site_description: A Django-based task queue using the database as the broker
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            merge_init_into_class: true
+            show_signature_annotations: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Configuration: getting-started/configuration.md
+      - Quick Start: getting-started/quickstart.md
+  - Guides:
+      - Creating Tasks: guides/creating-tasks.md
+      - Task Lifecycle: guides/lifecycle.md
+      - Using Signals: guides/signals.md
+      - Generator Functions: guides/generators.md
+      - Error Handling: guides/errors.md
+      - Worker Optimization: guides/worker-optimization.md
+  - Reference:
+      - Task Model: reference/models.md
+      - Signals: reference/signals.md
+      - Utilities: reference/utils.md
+      - Configuration: reference/config.md
+      - Monitoring: reference/monitor.md
+  - Advanced:
+      - Database Backends: advanced/databases.md
+      - Admin Interface: advanced/admin.md

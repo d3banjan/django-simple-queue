@@ -1,3 +1,9 @@
+"""
+Task execution worker module.
+
+This module contains the core logic for executing tasks in a subprocess,
+including support for generator functions and log capture.
+"""
 import asyncio
 import importlib
 import inspect
@@ -12,6 +18,17 @@ from django_simple_queue.models import Task
 
 
 class ManagedEventLoop:
+    """
+    Context manager for asyncio event loop management.
+
+    Ensures an event loop exists for the current context, creating one if
+    necessary. Cleans up the loop on exit.
+
+    Example:
+        with ManagedEventLoop() as loop:
+            loop.run_until_complete(async_func())
+    """
+
     def __init__(self):
         self.loop = None
 
@@ -29,6 +46,27 @@ class ManagedEventLoop:
 
 
 def execute_task(task_id, log_fd=None):
+    """
+    Execute a task by its ID.
+
+    This function is called in a subprocess by the task_worker command.
+    It handles loading the callable, executing it with the provided arguments,
+    and updating the task status/output in the database.
+
+    For generator functions, each yielded value is appended to the output,
+    and before_loop/after_loop signals are fired for each iteration.
+
+    Args:
+        task_id: UUID of the task to execute.
+        log_fd: Optional file descriptor for capturing stdout/stderr/logging.
+            If provided, all output is redirected to this descriptor.
+
+    Signals Fired:
+        - before_job: Before execution starts
+        - on_success: If task completes successfully
+        - on_failure: If task raises an exception
+        - before_loop/after_loop: For each generator iteration
+    """
     log_file = None
     log_handler = None
     if log_fd is not None:

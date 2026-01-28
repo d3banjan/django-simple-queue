@@ -1,3 +1,9 @@
+"""
+Task model for django-simple-queue.
+
+This module defines the Task model which represents a unit of work to be
+executed asynchronously by a worker process.
+"""
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
@@ -7,7 +13,35 @@ import json
 
 
 class Task(models.Model):
-    """Model for the task."""
+    """
+    Represents a task to be executed asynchronously by the worker.
+
+    A Task stores all the information needed to execute a callable function
+    with the specified arguments, along with its execution state and results.
+
+    Attributes:
+        id: UUID primary key for the task.
+        created: Timestamp when the task was created.
+        modified: Timestamp when the task was last modified.
+        task: Dotted path to the callable (e.g., "myapp.tasks.send_email").
+        args: JSON-serialized keyword arguments for the callable.
+        status: Current execution status (QUEUED, PROGRESS, COMPLETED, FAILED, CANCELLED).
+        output: Return value from the callable (stored as text).
+        worker_pid: Process ID of the worker handling this task.
+        error: Error message and traceback if the task failed.
+        log: Captured stdout/stderr/logging output from task execution.
+
+    Example:
+        Creating a task directly (prefer using ``create_task`` utility)::
+
+            from django_simple_queue.models import Task
+            import json
+
+            task = Task.objects.create(
+                task="myapp.tasks.send_email",
+                args=json.dumps({"to": "user@example.com", "subject": "Hello"})
+            )
+    """
 
     QUEUED = 0
     PROGRESS = 1
@@ -43,6 +77,14 @@ class Task(models.Model):
 
     @property
     def as_dict(self):
+        """
+        Returns a dictionary representation of the task.
+
+        Useful for JSON serialization in API responses.
+
+        Returns:
+            dict: Task data with string-formatted dates and status display.
+        """
         return {
             "id": str(self.id),
             "created": str(self.created),
@@ -58,7 +100,20 @@ class Task(models.Model):
 
     @staticmethod
     def _callable_task(task):
-        """Checks if the task is callable."""
+        """
+        Validates and returns the callable for a task path.
+
+        Args:
+            task: Dotted path to the callable (e.g., "myapp.tasks.send_email").
+
+        Returns:
+            The callable function or class.
+
+        Raises:
+            ImportError: If the module cannot be imported.
+            AttributeError: If the function doesn't exist in the module.
+            TypeError: If the resolved object is not callable.
+        """
         path = task.split('.')
         module = importlib.import_module('.'.join(path[:-1]))
         func = getattr(module, path[-1])
@@ -67,7 +122,15 @@ class Task(models.Model):
         return func
 
     def clean_task(self):
-        """Custom validation of the task field."""
+        """
+        Validates that the task field contains a valid callable path.
+
+        Called automatically during model validation. Ensures the dotted path
+        can be imported and resolved to a callable.
+
+        Raises:
+            ValidationError: If the task path is invalid or not callable.
+        """
         try:
             self._callable_task(self.task)
         except (ImportError, AttributeError, TypeError, ValueError) as e:
@@ -80,7 +143,15 @@ class Task(models.Model):
             })
 
     def clean_args(self):
-        """Custom validation of the args field."""
+        """
+        Validates that the args field contains valid JSON.
+
+        Called automatically during model validation. Ensures the args field
+        can be parsed as JSON (should be a dict when deserialized).
+
+        Raises:
+            ValidationError: If the args field is not valid JSON.
+        """
         if self.args is None or self.args == "":
             return
 
