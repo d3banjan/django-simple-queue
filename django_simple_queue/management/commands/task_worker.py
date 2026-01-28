@@ -1,5 +1,6 @@
 import os
 import random
+import threading
 import time
 from multiprocessing import Process
 
@@ -57,15 +58,37 @@ class Command(BaseCommand):
                     # avoid corruption by closing all connections
                     connections.close_all()
 
-                    # Create a new process for the task
-                    p = Process(target=execute_task, args=(task_id,))
+                    # Create pipe for capturing child stdout/stderr/logging
+                    read_fd, write_fd = os.pipe()
+                    p = Process(
+                        target=execute_task, args=(task_id, write_fd)
+                    )
                     p.start()
-                    p.join()  # Wait for the process to complete
+                    os.close(write_fd)  # Parent doesn't write
 
-                    # Clear worker_pid (parent owns this field)
+                    log_chunks = []
+
+                    def drain():
+                        with os.fdopen(read_fd, "r", closefd=True) as f:
+                            while True:
+                                chunk = f.read(4096)
+                                if not chunk:
+                                    break
+                                log_chunks.append(chunk)
+
+                    reader = threading.Thread(target=drain, daemon=True)
+                    reader.start()
+                    p.join()
+                    reader.join(timeout=5)
+
+                    # Store log + clear PID (parent-owned fields only)
+                    log_text = "".join(log_chunks)
                     task = Task.objects.get(id=task_id)
+                    task.log = log_text if log_text else None
                     task.worker_pid = None
-                    task.save(update_fields=["worker_pid", "modified"])
+                    task.save(
+                        update_fields=["log", "worker_pid", "modified"]
+                    )
 
                     handle_subprocess_exit(task_id, p.exitcode)
 

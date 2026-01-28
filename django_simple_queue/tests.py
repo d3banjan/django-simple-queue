@@ -1,4 +1,6 @@
 import os
+import threading
+from multiprocessing import Process
 
 from django.test import TransactionTestCase
 
@@ -192,3 +194,43 @@ class SignalTest(TransactionTestCase):
         finally:
             signals.before_loop.disconnect(on_before_loop)
             signals.after_loop.disconnect(on_after_loop)
+
+
+class PipeLogCaptureTest(TransactionTestCase):
+    def test_stdout_captured_in_pipe(self):
+        from django.db import connections
+
+        task = Task.objects.create(
+            task="django_simple_queue.test_tasks.print_and_return",
+            args="{}",
+            status=Task.PROGRESS,  # Set to PROGRESS like parent would
+        )
+        # Close parent's DB connections before fork (like task_worker does)
+        connections.close_all()
+
+        read_fd, write_fd = os.pipe()
+        p = Process(target=execute_task, args=(task.id, write_fd))
+        p.start()
+        os.close(write_fd)
+
+        log_chunks = []
+
+        def drain():
+            with os.fdopen(read_fd, "r", closefd=True) as f:
+                while True:
+                    chunk = f.read(4096)
+                    if not chunk:
+                        break
+                    log_chunks.append(chunk)
+
+        reader = threading.Thread(target=drain, daemon=True)
+        reader.start()
+        p.join()
+        reader.join(timeout=5)
+
+        log_output = "".join(log_chunks)
+        self.assertIn("log line from stdout", log_output)
+        self.assertIn("log line from stderr", log_output)
+        self.assertIn("log line from logging", log_output)
+        task.refresh_from_db()
+        self.assertEqual(task.output, "result")  # output is clean
