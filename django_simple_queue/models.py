@@ -30,6 +30,9 @@ class Task(models.Model):
     args = models.TextField(_("Arguments"), null=True, blank=True, help_text="Arguments in JSON format")
     status = models.IntegerField(_("Status"), default=QUEUED, choices=STATUS_CHOICES)
     output = models.TextField(_("Output"), null=True, blank=True)
+    worker_pid = models.IntegerField(_("Worker PID"), null=True, blank=True)
+    error = models.TextField(_("Error"), null=True, blank=True)
+    log = models.TextField(_("Log"), null=True, blank=True)
 
     def __str__(self):
         return str(self.id)
@@ -48,6 +51,9 @@ class Task(models.Model):
             "args": self.args,
             "status": self.get_status_display(),
             "output": self.output,
+            "worker_pid": self.worker_pid,
+            "error": self.error,
+            "log": self.log,
         }
 
     @staticmethod

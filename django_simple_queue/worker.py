@@ -48,7 +48,7 @@ def execute_task(task_id, log_fd=None):
                 task_obj.status = Task.COMPLETED
                 task_obj.save()
             except Exception as e:
-                task_obj.output = (task_obj.output or "") + f"{repr(e)}\n\n{traceback.format_exc()}"
+                task_obj.error = f"{repr(e)}\n\n{traceback.format_exc()}"
                 task_obj.status = Task.FAILED
                 task_obj.save()
             finally:
