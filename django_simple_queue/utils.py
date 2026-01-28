@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+import uuid
 
 from django_simple_queue.conf import is_task_allowed, get_allowed_tasks
 from django_simple_queue.models import Task
@@ -9,7 +12,7 @@ class TaskNotAllowedError(Exception):
     pass
 
 
-def create_task(task, args):
+def create_task(task: str, args: dict) -> uuid.UUID:
     """
     Create a new task to be executed by the worker.
 

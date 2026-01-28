@@ -3,10 +3,12 @@ Configuration settings for django_simple_queue.
 
 Settings are read from Django's settings.py with the DJANGO_SIMPLE_QUEUE_ prefix.
 """
+from __future__ import annotations
+
 from django.conf import settings
 
 
-def get_allowed_tasks():
+def get_allowed_tasks() -> set[str] | None:
     """
     Returns the set of allowed task callables.
 
@@ -25,7 +27,7 @@ def get_allowed_tasks():
     return set(allowed)
 
 
-def is_task_allowed(task_path):
+def is_task_allowed(task_path: str) -> bool:
     """
     Check if a task path is in the allowed list.
 
@@ -43,7 +45,7 @@ def is_task_allowed(task_path):
     return task_path in allowed
 
 
-def get_max_output_size():
+def get_max_output_size() -> int:
     """
     Returns the maximum allowed output size in bytes.
 
@@ -55,7 +57,7 @@ def get_max_output_size():
     return getattr(settings, "DJANGO_SIMPLE_QUEUE_MAX_OUTPUT_SIZE", 10 * 1024 * 1024)
 
 
-def get_max_args_size():
+def get_max_args_size() -> int:
     """
     Returns the maximum allowed args JSON size in bytes.
 
@@ -67,7 +69,7 @@ def get_max_args_size():
     return getattr(settings, "DJANGO_SIMPLE_QUEUE_MAX_ARGS_SIZE", 1024 * 1024)
 
 
-def get_task_timeout():
+def get_task_timeout() -> int | None:
     """
     Returns the maximum execution time for a task in seconds.
 

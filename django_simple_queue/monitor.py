@@ -5,7 +5,10 @@ This module provides functions for detecting and handling tasks whose worker
 processes have died unexpectedly, as well as handling task timeouts and
 subprocess failures.
 """
+from __future__ import annotations
+
 import os
+import uuid
 
 from django.db import transaction
 
@@ -13,7 +16,7 @@ from django_simple_queue import signals
 from django_simple_queue.models import Task
 
 
-def detect_orphaned_tasks():
+def detect_orphaned_tasks() -> None:
     """
     Detect and mark orphaned tasks as failed.
 
@@ -50,7 +53,7 @@ def detect_orphaned_tasks():
                 pass  # PID exists, different user — worker is alive
 
 
-def handle_subprocess_exit(task_id, exit_code):
+def handle_subprocess_exit(task_id: uuid.UUID, exit_code: int | None) -> None:
     """
     Handle a task subprocess that exited with a non-zero code.
 
@@ -72,7 +75,7 @@ def handle_subprocess_exit(task_id, exit_code):
         signals.on_failure.send(sender=Task, task=task, error=None)
 
 
-def handle_task_timeout(task_id, timeout_seconds):
+def handle_task_timeout(task_id: uuid.UUID, timeout_seconds: int) -> None:
     """
     Mark a task as failed due to exceeding the timeout.
 

@@ -76,7 +76,7 @@ class Task(models.Model):
         verbose_name_plural = _("Tasks")
 
     @property
-    def as_dict(self):
+    def as_dict(self) -> dict:
         """
         Returns a dictionary representation of the task.
 

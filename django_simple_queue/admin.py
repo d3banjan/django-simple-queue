@@ -3,9 +3,14 @@ Django admin configuration for django-simple-queue.
 
 Provides a customized admin interface for viewing and managing tasks.
 """
+from __future__ import annotations
+
 from django.contrib import admin, messages
+from django.db.models import QuerySet
+from django.http import HttpRequest
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.safestring import SafeString
 from django.utils.translation import ngettext
 from django_simple_queue.models import Task
 
@@ -33,7 +38,7 @@ class TaskAdmin(admin.ModelAdmin):
             self.readonly_fields = [field.name for field in obj.__class__._meta.fields]
         return self.readonly_fields
 
-    def status_page_link(self, obj):
+    def status_page_link(self, obj: Task) -> SafeString:
         """
         Generate a clickable link to the task status page.
 
@@ -54,7 +59,7 @@ class TaskAdmin(admin.ModelAdmin):
     status_page_link.short_description = "Status"
 
     @admin.action(description='Enqueue')
-    def enqueue_tasks(self, request, queryset):
+    def enqueue_tasks(self, request: HttpRequest, queryset: QuerySet[Task]) -> None:
         """
         Admin action to re-queue selected tasks.
 
