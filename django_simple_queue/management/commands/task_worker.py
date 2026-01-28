@@ -1,3 +1,4 @@
+import os
 import random
 import time
 from multiprocessing import Process
@@ -45,7 +46,10 @@ class Command(BaseCommand):
                     )
                     if queued_task:
                         queued_task.status = Task.PROGRESS  # claim the task
-                        queued_task.save(update_fields=["status", "modified"])
+                        queued_task.worker_pid = os.getpid()
+                        queued_task.save(
+                            update_fields=["status", "modified", "worker_pid"]
+                        )
                         task_id = queued_task.id
 
                 if task_id:
@@ -57,6 +61,16 @@ class Command(BaseCommand):
                     p = Process(target=execute_task, args=(task_id,))
                     p.start()
                     p.join()  # Wait for the process to complete
+
+                    # Clear worker_pid (parent owns this field)
+                    task = Task.objects.get(id=task_id)
+                    task.worker_pid = None
+                    task.save(update_fields=["worker_pid", "modified"])
+
+                    handle_subprocess_exit(task_id, p.exitcode)
+
+                # Check for orphaned tasks before polling for new ones
+                detect_orphaned_tasks()
 
         except KeyboardInterrupt:
             pass
