@@ -27,7 +27,16 @@ if not settings.configured:
             "django.contrib.auth",
             "django_simple_queue",
         ],
+        TEMPLATES=[
+            {
+                "BACKEND": "django.template.backends.django.DjangoTemplates",
+                "APP_DIRS": True,
+            },
+        ],
+        ROOT_URLCONF="django_simple_queue.urls",
         DEFAULT_AUTO_FIELD="django.db.models.BigAutoField",
+        # For security tests - allowlist is NOT set by default (backwards-compatible)
+        # Tests can override this with @override_settings
     )
 
 django.setup()

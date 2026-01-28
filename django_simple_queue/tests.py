@@ -2,11 +2,17 @@ import os
 import threading
 from multiprocessing import Process
 
-from django.test import TransactionTestCase
+from django.core.exceptions import ValidationError
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 
 from django_simple_queue import signals
 from django_simple_queue.models import Task
-from django_simple_queue.monitor import detect_orphaned_tasks, handle_subprocess_exit
+from django_simple_queue.monitor import (
+    detect_orphaned_tasks,
+    handle_subprocess_exit,
+    handle_task_timeout,
+)
+from django_simple_queue.utils import TaskNotAllowedError, create_task
 from django_simple_queue.worker import execute_task
 
 
@@ -116,6 +122,19 @@ class OrphanDetectionTest(TransactionTestCase):
         handle_subprocess_exit(task.id, exit_code=0)
         task.refresh_from_db()
         self.assertEqual(task.status, Task.COMPLETED)
+
+    def test_timeout_marks_task_failed(self):
+        """Tasks that timeout should be marked as failed."""
+        task = Task.objects.create(
+            task="django_simple_queue.test_tasks.sleep_task",
+            args='{"seconds": 10}',
+            status=Task.PROGRESS,
+        )
+        handle_task_timeout(task.id, timeout_seconds=5)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.FAILED)
+        self.assertIn("timed out", task.error)
+        self.assertIn("5 seconds", task.error)
 
 
 class SignalTest(TransactionTestCase):
@@ -234,3 +253,186 @@ class PipeLogCaptureTest(TransactionTestCase):
         self.assertIn("log line from logging", log_output)
         task.refresh_from_db()
         self.assertEqual(task.output, "result")  # output is clean
+
+
+# =============================================================================
+# Security Tests
+# =============================================================================
+
+
+class XSSProtectionTest(TestCase):
+    """Test that user-controlled data is properly escaped in HTML output."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_html_response_escapes_task_name(self):
+        """Task name with HTML should be escaped."""
+        malicious_task = "<script>alert('xss')</script>"
+        task = Task.objects.create(
+            task=malicious_task,
+            args="{}",
+            status=Task.COMPLETED,
+        )
+        response = self.client.get(f"/task?task_id={task.id}")
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # The script tag should be escaped, not rendered as HTML
+        self.assertNotIn("<script>", content)
+        self.assertIn("&lt;script&gt;", content)
+
+    def test_html_response_escapes_output(self):
+        """Task output with HTML should be escaped."""
+        task = Task.objects.create(
+            task="django_simple_queue.test_tasks.return_hello",
+            args="{}",
+            status=Task.COMPLETED,
+            output="<img src=x onerror=alert('xss')>",
+        )
+        response = self.client.get(f"/task?task_id={task.id}")
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # The img tag should be escaped
+        self.assertNotIn("<img src=x", content)
+        self.assertIn("&lt;img", content)
+
+    def test_html_response_escapes_args(self):
+        """Task args with HTML should be escaped."""
+        task = Task.objects.create(
+            task="django_simple_queue.test_tasks.return_hello",
+            args='{"key": "<script>evil</script>"}',
+            status=Task.QUEUED,
+        )
+        response = self.client.get(f"/task?task_id={task.id}")
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn("<script>evil</script>", content)
+
+    def test_json_response_does_not_escape(self):
+        """JSON response should contain raw data (not HTML-escaped)."""
+        task = Task.objects.create(
+            task="test.task",
+            args='{"key": "<script>test</script>"}',
+            status=Task.QUEUED,
+        )
+        response = self.client.get(f"/task?task_id={task.id}&type=json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
+        # JSON should have raw data
+        self.assertIn("<script>test</script>", response.content.decode())
+
+
+class TaskAllowlistTest(TestCase):
+    """Test task allowlist functionality."""
+
+    def test_no_allowlist_permits_all_tasks(self):
+        """Without DJANGO_SIMPLE_QUEUE_ALLOWED_TASKS, all tasks are allowed."""
+        # Default config has no allowlist
+        task_id = create_task(
+            task="django_simple_queue.test_tasks.return_hello",
+            args={}
+        )
+        self.assertIsNotNone(task_id)
+
+    @override_settings(DJANGO_SIMPLE_QUEUE_ALLOWED_TASKS={
+        "django_simple_queue.test_tasks.return_hello",
+    })
+    def test_allowlist_permits_listed_tasks(self):
+        """Tasks in the allowlist should be permitted."""
+        task_id = create_task(
+            task="django_simple_queue.test_tasks.return_hello",
+            args={}
+        )
+        self.assertIsNotNone(task_id)
+
+    @override_settings(DJANGO_SIMPLE_QUEUE_ALLOWED_TASKS={
+        "django_simple_queue.test_tasks.return_hello",
+    })
+    def test_allowlist_blocks_unlisted_tasks(self):
+        """Tasks NOT in the allowlist should raise TaskNotAllowedError."""
+        with self.assertRaises(TaskNotAllowedError) as ctx:
+            create_task(
+                task="django_simple_queue.test_tasks.gen_abc",
+                args={}
+            )
+        self.assertIn("not in the allowed list", str(ctx.exception))
+
+    @override_settings(DJANGO_SIMPLE_QUEUE_ALLOWED_TASKS=set())
+    def test_empty_allowlist_blocks_all_tasks(self):
+        """Empty allowlist should block all tasks."""
+        with self.assertRaises(TaskNotAllowedError):
+            create_task(
+                task="django_simple_queue.test_tasks.return_hello",
+                args={}
+            )
+
+
+class ModelValidationTest(TestCase):
+    """Test that model validation catches specific exceptions."""
+
+    def test_clean_args_rejects_invalid_json(self):
+        """Invalid JSON should raise ValidationError."""
+        task = Task(
+            task="django_simple_queue.test_tasks.return_hello",
+            args="not valid json {",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            task.clean_args()
+        self.assertIn("args", ctx.exception.message_dict)
+
+    def test_clean_args_accepts_valid_json(self):
+        """Valid JSON should pass validation."""
+        task = Task(
+            task="django_simple_queue.test_tasks.return_hello",
+            args='{"key": "value", "num": 123}',
+        )
+        # Should not raise
+        task.clean_args()
+
+    def test_clean_args_accepts_empty(self):
+        """Empty args should pass validation."""
+        task = Task(
+            task="django_simple_queue.test_tasks.return_hello",
+            args=None,
+        )
+        task.clean_args()  # Should not raise
+
+        task.args = ""
+        task.clean_args()  # Should not raise
+
+    def test_clean_task_rejects_nonexistent_module(self):
+        """Non-existent module should raise ValidationError."""
+        task = Task(
+            task="nonexistent.module.function",
+            args="{}",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            task.clean_task()
+        self.assertIn("task", ctx.exception.message_dict)
+
+
+class ViewErrorHandlingTest(TestCase):
+    """Test proper error handling in views."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_missing_task_id_returns_400(self):
+        """Missing task_id parameter should return 400."""
+        response = self.client.get("/task")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Missing", response.content.decode())
+
+    def test_invalid_uuid_returns_400(self):
+        """Invalid UUID format should return 400."""
+        response = self.client.get("/task?task_id=not-a-uuid")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid", response.content.decode())
+
+    def test_nonexistent_task_returns_400(self):
+        """Non-existent task UUID should return 400."""
+        import uuid
+        fake_id = uuid.uuid4()
+        response = self.client.get(f"/task?task_id={fake_id}")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not found", response.content.decode())

@@ -1,7 +1,6 @@
-from django.contrib import admin
-from django.shortcuts import reverse
-from django.utils.safestring import mark_safe
-from django.contrib import messages
+from django.contrib import admin, messages
+from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.translation import ngettext
 from django_simple_queue.models import Task
 
@@ -15,11 +14,12 @@ class TaskAdmin(admin.ModelAdmin):
         return self.readonly_fields
 
     def status_page_link(self, obj):
-        return mark_safe("<a href='{}?task_id={}', target='_blank'>{}</a>".format(
+        return format_html(
+            '<a href="{}?task_id={}" target="_blank">{}</a>',
             reverse('django_simple_queue:task'),
             obj.id,
             obj.get_status_display(),
-        ))
+        )
     status_page_link.short_description = "Status"
 
     @admin.action(description='Enqueue')

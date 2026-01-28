@@ -40,3 +40,18 @@ def handle_subprocess_exit(task_id, exit_code):
         task.worker_pid = None
         task.save(update_fields=["status", "error", "worker_pid", "modified"])
         signals.on_failure.send(sender=Task, task=task, error=None)
+
+
+def handle_task_timeout(task_id, timeout_seconds):
+    """Mark a task as failed due to exceeding the timeout."""
+    task = Task.objects.get(id=task_id)
+    if task.status == Task.PROGRESS:
+        task.error = (task.error or "") + (
+            f"\nTask timed out after {timeout_seconds} seconds"
+        )
+        task.status = Task.FAILED
+        task.worker_pid = None
+        task.save(update_fields=["status", "error", "worker_pid", "modified"])
+        signals.on_failure.send(sender=Task, task=task, error=TimeoutError(
+            f"Task exceeded {timeout_seconds}s timeout"
+        ))

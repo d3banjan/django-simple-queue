@@ -70,15 +70,27 @@ class Task(models.Model):
         """Custom validation of the task field."""
         try:
             self._callable_task(self.task)
-        except:
+        except (ImportError, AttributeError, TypeError, ValueError) as e:
             raise ValidationError({
-                'callable': ValidationError(
-                    _('Invalid callable, must be importable'), code='invalid')
+                'task': ValidationError(
+                    _('Invalid callable: %(error)s'),
+                    code='invalid',
+                    params={'error': str(e)}
+                )
             })
 
     def clean_args(self):
         """Custom validation of the args field."""
+        if self.args is None or self.args == "":
+            return
+
         try:
             json.loads(self.args)
-        except:
-            raise ValidationError(_('Invalid JSON text'), code='invalid')
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            raise ValidationError({
+                'args': ValidationError(
+                    _('Invalid JSON: %(error)s'),
+                    code='invalid',
+                    params={'error': str(e)}
+                )
+            })

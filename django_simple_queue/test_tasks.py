@@ -21,3 +21,11 @@ def print_and_return(**kwargs):
 
     print("log line from stderr", file=sys.stderr)
     return "result"
+
+
+def sleep_task(seconds=1, **kwargs):
+    """Task that sleeps for testing timeout functionality."""
+    import time
+
+    time.sleep(seconds)
+    return f"slept for {seconds} seconds"
